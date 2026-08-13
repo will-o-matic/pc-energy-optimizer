@@ -1,0 +1,17 @@
+# Copy to config.toml (gitignored) and edit per PC.
+
+[server]
+bind_host = "100.64.0.10"      # replace with this PC's Tailscale IP
+port = 8787
+token = "CHANGE-ME"            # generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+[guardrails]
+min_idle_minutes = 10
+max_cpu_percent = 50
+cpu_sample_seconds = 1.0
+
+[sleep]
+response_delay_seconds = 3
+
+[logging]
+level = "INFO"
