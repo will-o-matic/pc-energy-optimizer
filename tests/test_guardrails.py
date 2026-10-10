@@ -4,7 +4,7 @@ import sys
 from pc_energy_optimizer.config import GuardrailsConfig
 from pc_energy_optimizer.guardrails import evaluate
 
-CFG = GuardrailsConfig(min_idle_minutes=10, max_cpu_percent=50)
+CFG = GuardrailsConfig(min_idle_minutes=10, wake_grace_minutes=10, max_cpu_percent=50)
 
 
 def test_allowed_when_idle_and_calm():
@@ -53,8 +53,40 @@ def test_boundaries():
     print("OK: boundary equality allowed")
 
 
+def test_refused_recently_woke():
+    # Stale idle from before sleep: idle looks huge, but woke 5 min ago.
+    d = evaluate(idle_s=9999, cpu_percent=10.0, cfg=CFG, force=False,
+                 since_wake_s=300.0)
+    assert not d.allowed
+    assert d.reasons == [
+        {"code": "recently_woke", "since_wake_s": 300.0, "threshold_s": 1200.0}
+    ]
+    print("OK: refused when recently woke")
+
+
+def test_wake_grace_boundary():
+    # 10 min grace + 10 min idle: allowed at exactly 20 min after wake
+    d = evaluate(idle_s=9999, cpu_percent=10.0, cfg=CFG, force=False,
+                 since_wake_s=1199.0)
+    assert not d.allowed
+    d = evaluate(idle_s=9999, cpu_percent=10.0, cfg=CFG, force=False,
+                 since_wake_s=1200.0)
+    assert d.allowed
+    print("OK: wake grace boundary at grace + min_idle")
+
+
+def test_force_bypasses_recently_woke():
+    d = evaluate(idle_s=0.0, cpu_percent=10.0, cfg=CFG, force=True,
+                 since_wake_s=0.0)
+    assert d.allowed
+    print("OK: force bypasses wake grace")
+
+
 if __name__ == "__main__":
     test_allowed_when_idle_and_calm()
+    test_refused_recently_woke()
+    test_wake_grace_boundary()
+    test_force_bypasses_recently_woke()
     test_refused_user_active()
     test_refused_cpu_high()
     test_both_reasons_in_order()

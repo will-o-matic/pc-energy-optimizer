@@ -17,7 +17,11 @@ class Fakes:
     def __init__(self):
         self.idle_s = 9999.0
         self.cpu = 5.0
+        self.since_wake = 99999.0
         self.sleep_calls = 0
+
+    def since_wake_fn(self):
+        return self.since_wake
 
     def idle_fn(self):
         return self.idle_s
@@ -36,7 +40,8 @@ def start_test_server(fakes):
         sleep=SleepConfig(response_delay_seconds=0),
     )
     srv = create_server(
-        cfg, idle_fn=fakes.idle_fn, cpu_fn=fakes.cpu_fn, sleep_fn=fakes.sleep_fn
+        cfg, idle_fn=fakes.idle_fn, cpu_fn=fakes.cpu_fn, sleep_fn=fakes.sleep_fn,
+        since_wake_fn=fakes.since_wake_fn,
     )
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv, f"http://127.0.0.1:{srv.server_address[1]}"
@@ -75,9 +80,11 @@ def main():
 
     status, body = request(f"{base}/status", token=TOKEN)
     assert status == 200
-    for key in ("hostname", "idle_s", "cpu_percent", "uptime_s", "version"):
+    for key in ("hostname", "idle_s", "cpu_percent", "uptime_s",
+                "since_wake_s", "version"):
         assert key in body, f"missing {key}"
     assert body["idle_s"] == 9999.0 and body["cpu_percent"] == 5.0
+    assert body["since_wake_s"] == 99999.0
     print("OK: /status 200 with keys")
 
     status, body = request(f"{base}/nope", token=TOKEN)
@@ -89,6 +96,14 @@ def main():
     time.sleep(0.5)
     assert fakes.sleep_calls == 1
     print("OK: /sleep 202 and sleep_fn called")
+
+    fakes.since_wake = 60.0
+    status, body = request(f"{base}/sleep", method="POST", token=TOKEN)
+    assert status == 409
+    assert [r["code"] for r in body["reasons"]] == ["recently_woke"]
+    assert fakes.sleep_calls == 1
+    print("OK: /sleep 409 recently woke")
+    fakes.since_wake = 99999.0
 
     fakes.idle_s = 42.0
     fakes.cpu = 87.2
