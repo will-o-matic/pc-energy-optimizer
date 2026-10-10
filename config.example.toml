@@ -7,6 +7,7 @@ token = "CHANGE-ME"            # generate: python -c "import secrets; print(secr
 
 [guardrails]
 min_idle_minutes = 10
+wake_grace_minutes = 10        # idle clock starts this long after resume/start
 max_cpu_percent = 50
 cpu_sample_seconds = 1.0
 

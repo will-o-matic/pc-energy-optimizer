@@ -20,6 +20,7 @@ class ServerConfig:
 @dataclass
 class GuardrailsConfig:
     min_idle_minutes: float = 10
+    wake_grace_minutes: float = 10
     max_cpu_percent: float = 50
     cpu_sample_seconds: float = 1.0
 

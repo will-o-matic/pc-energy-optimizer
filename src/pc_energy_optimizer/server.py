@@ -1,6 +1,6 @@
 """HTTP API: routing, bearer auth, JSON responses.
 
-Providers (idle_fn, cpu_fn, sleep_fn) are injected so tests never touch
+Providers (idle_fn, cpu_fn, sleep_fn, since_wake_fn) are injected so tests never touch
 Windows APIs.
 """
 from __future__ import annotations
@@ -24,6 +24,7 @@ def create_server(
     idle_fn: Callable[[], float],
     cpu_fn: Callable[[], float],
     sleep_fn: Callable[[], bool],
+    since_wake_fn: Callable[[], float],
 ) -> ThreadingHTTPServer:
     token = cfg.server.token
 
@@ -61,6 +62,7 @@ def create_server(
                         "idle_s": idle_fn(),
                         "cpu_percent": cpu_fn(),
                         "uptime_s": metrics.uptime_s(),
+                        "since_wake_s": since_wake_fn(),
                         "version": __version__,
                     },
                 )
@@ -93,6 +95,7 @@ def create_server(
                 cpu_percent=cpu_fn(),
                 cfg=cfg.guardrails,
                 force=force,
+                since_wake_s=since_wake_fn(),
             )
             if not decision.allowed:
                 log.info("sleep refused: %s", decision.reasons)

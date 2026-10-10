@@ -10,6 +10,7 @@ from . import __version__, metrics, winapi
 from .config import ConfigError, load_config
 from .logging_setup import setup_logging
 from .server import create_server
+from .wake import WakeTracker
 
 log = logging.getLogger("pc_energy_optimizer")
 
@@ -32,6 +33,9 @@ def main() -> int:
     def cpu_fn() -> float:
         return metrics.cpu_percent(cfg.guardrails.cpu_sample_seconds)
 
+    wake = WakeTracker()
+    wake.start()
+
     # Retry bind: at logon tailscaled may not have brought the tailnet IP up yet.
     deadline = time.monotonic() + BIND_RETRY_LIMIT_SECONDS
     while True:
@@ -41,6 +45,7 @@ def main() -> int:
                 idle_fn=winapi.get_idle_seconds,
                 cpu_fn=cpu_fn,
                 sleep_fn=winapi.request_sleep,
+                since_wake_fn=wake.seconds_since_wake,
             )
             break
         except OSError as e:

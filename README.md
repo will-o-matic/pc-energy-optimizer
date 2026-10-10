@@ -15,12 +15,19 @@ boundary; requests need a per-PC bearer token (except `/health`).
 | Endpoint | Auth | Response |
 |---|---|---|
 | `GET /health` | none | `200 {"status": "ok", "version": ...}` |
-| `GET /status` | Bearer | `200 {"hostname", "idle_s", "cpu_percent", "uptime_s", "version"}` |
+| `GET /status` | Bearer | `200 {"hostname", "idle_s", "cpu_percent", "uptime_s", "since_wake_s", "version"}` |
 | `POST /sleep` | Bearer | `202` sleeping (after ~3s delay) or `409` refused with reasons |
 
 `POST /sleep` body is optional: `{"force": true}` bypasses the guardrails.
-Refusal reasons: `user_active` (input within `min_idle_minutes`) and
-`cpu_high` (above `max_cpu_percent`).
+Refusal reasons: `user_active` (input within `min_idle_minutes`),
+`recently_woke` (less than `wake_grace_minutes` + `min_idle_minutes` since
+resume or agent start) and `cpu_high` (above `max_cpu_percent`).
+
+The wake grace exists because a remote wake involves no input, so `idle_s`
+still reflects the last input before sleep and the PC would otherwise be
+put straight back to sleep. With the defaults, sleep is allowed no sooner
+than 20 minutes after wake. Resume is detected by a 5s heartbeat thread
+seeing the wall clock jump by more than 30s.
 
 ## Install (per PC)
 

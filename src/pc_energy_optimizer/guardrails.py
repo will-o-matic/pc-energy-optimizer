@@ -13,7 +13,11 @@ class Decision:
 
 
 def evaluate(
-    idle_s: float, cpu_percent: float, cfg: GuardrailsConfig, force: bool
+    idle_s: float,
+    cpu_percent: float,
+    cfg: GuardrailsConfig,
+    force: bool,
+    since_wake_s: float = float("inf"),
 ) -> Decision:
     if force:
         return Decision(allowed=True)
@@ -23,6 +27,17 @@ def evaluate(
     if idle_s < threshold_s:
         reasons.append(
             {"code": "user_active", "idle_s": idle_s, "threshold_s": threshold_s}
+        )
+    # The idle clock only starts counting wake_grace_minutes after resume, so
+    # a remote wake (no input, stale idle_s) isn't immediately slept again.
+    required_s = cfg.wake_grace_minutes * 60.0 + threshold_s
+    if since_wake_s < required_s:
+        reasons.append(
+            {
+                "code": "recently_woke",
+                "since_wake_s": since_wake_s,
+                "threshold_s": required_s,
+            }
         )
     if cpu_percent > cfg.max_cpu_percent:
         reasons.append(
