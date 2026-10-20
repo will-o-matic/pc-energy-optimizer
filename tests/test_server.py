@@ -19,6 +19,17 @@ class Fakes:
         self.cpu = 5.0
         self.since_wake = 99999.0
         self.sleep_calls = 0
+        self.power_requests = None
+        self.on_sleep_calls = []
+
+    def power_fn(self):
+        return {"estimated_watts": 123.4, "gpu_watts": None, "energy_kwh": 0.5}
+
+    def power_requests_fn(self):
+        return self.power_requests
+
+    def on_sleep(self, forced):
+        self.on_sleep_calls.append(forced)
 
     def since_wake_fn(self):
         return self.since_wake
@@ -41,7 +52,8 @@ def start_test_server(fakes):
     )
     srv = create_server(
         cfg, idle_fn=fakes.idle_fn, cpu_fn=fakes.cpu_fn, sleep_fn=fakes.sleep_fn,
-        since_wake_fn=fakes.since_wake_fn,
+        since_wake_fn=fakes.since_wake_fn, power_fn=fakes.power_fn,
+        power_requests_fn=fakes.power_requests_fn, on_sleep=fakes.on_sleep,
     )
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv, f"http://127.0.0.1:{srv.server_address[1]}"
@@ -67,7 +79,11 @@ def main():
     srv, base = start_test_server(fakes)
 
     status, body = request(f"{base}/health")
-    assert status == 200 and body == {"status": "ok", "version": __version__}
+    assert status == 200 and body == {
+        "status": "ok",
+        "version": __version__,
+        "features": ["since_wake", "webhook", "power_estimate", "power_request"],
+    }
     print("OK: /health no auth")
 
     status, body = request(f"{base}/status")
@@ -81,10 +97,12 @@ def main():
     status, body = request(f"{base}/status", token=TOKEN)
     assert status == 200
     for key in ("hostname", "idle_s", "cpu_percent", "uptime_s",
-                "since_wake_s", "version"):
+                "since_wake_s", "estimated_watts", "gpu_watts", "energy_kwh",
+                "version"):
         assert key in body, f"missing {key}"
     assert body["idle_s"] == 9999.0 and body["cpu_percent"] == 5.0
     assert body["since_wake_s"] == 99999.0
+    assert body["estimated_watts"] == 123.4 and body["gpu_watts"] is None
     print("OK: /status 200 with keys")
 
     status, body = request(f"{base}/nope", token=TOKEN)
@@ -95,7 +113,17 @@ def main():
     assert status == 202 and body["result"] == "sleeping" and body["forced"] is False
     time.sleep(0.5)
     assert fakes.sleep_calls == 1
+    assert fakes.on_sleep_calls == [False]
     print("OK: /sleep 202 and sleep_fn called")
+
+    req = {"type": "SYSTEM", "kind": "PROCESS", "name": "x.exe", "reason": ""}
+    fakes.power_requests = [req]
+    status, body = request(f"{base}/sleep", method="POST", token=TOKEN)
+    assert status == 409
+    assert body["reasons"] == [{"code": "power_request", "requests": [req]}]
+    assert fakes.sleep_calls == 1 and fakes.on_sleep_calls == [False]
+    print("OK: /sleep 409 power request")
+    fakes.power_requests = None
 
     fakes.since_wake = 60.0
     status, body = request(f"{base}/sleep", method="POST", token=TOKEN)
@@ -119,6 +147,7 @@ def main():
     assert status == 202 and body["forced"] is True
     time.sleep(0.5)
     assert fakes.sleep_calls == 2
+    assert fakes.on_sleep_calls == [False, True]
     print("OK: /sleep force override")
 
     status, body = request(f"{base}/sleep", method="POST")

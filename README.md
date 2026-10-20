@@ -14,14 +14,55 @@ boundary; requests need a per-PC bearer token (except `/health`).
 
 | Endpoint | Auth | Response |
 |---|---|---|
-| `GET /health` | none | `200 {"status": "ok", "version": ...}` |
-| `GET /status` | Bearer | `200 {"hostname", "idle_s", "cpu_percent", "uptime_s", "since_wake_s", "version"}` |
+| `GET /health` | none | `200 {"status": "ok", "version": ..., "features": [...]}` |
+| `GET /status` | Bearer | `200 {"hostname", "idle_s", "cpu_percent", "uptime_s", "since_wake_s", "estimated_watts", "gpu_watts", "energy_kwh", "version"}` |
 | `POST /sleep` | Bearer | `202` sleeping (after ~3s delay) or `409` refused with reasons |
 
 `POST /sleep` body is optional: `{"force": true}` bypasses the guardrails.
 Refusal reasons: `user_active` (input within `min_idle_minutes`),
 `recently_woke` (less than `wake_grace_minutes` + `min_idle_minutes` since
-resume or agent start) and `cpu_high` (above `max_cpu_percent`).
+resume or agent start), `cpu_high` (above `max_cpu_percent`) and
+`power_request` (something holds a Windows power request of a type in
+`power_request_types`; the reason lists them as `{"type", "kind", "name",
+"reason"}`). The agent's own requests and anything matching
+`ignore_power_requests` are skipped.
+
+`power_request` reads `powercfg /requests`, which **needs an elevated
+process**. The at-logon task runs non-elevated, so by default the check
+can't read requests: it logs a warning and is skipped (never refuses).
+
+`features` in `/health` lets clients detect what an agent supports:
+`since_wake`, `webhook`, `power_estimate`, `power_request`.
+
+### Power estimate
+
+A background thread samples CPU (and NVIDIA board power via `nvidia-smi`,
+when present) every `sample_seconds` and estimates whole-system wall draw:
+
+    estimated_watts = base_watts + cpu_watts * (cpu%/100) ** cpu_exponent
+                      + gpu_watts / psu_efficiency     (or gpu_fallback_watts)
+
+`gpu_watts` is the measured board power, or `null` without `nvidia-smi`.
+`energy_kwh` integrates the estimate while awake (sleep gaps add nothing)
+and is persisted to `state\energy.json` every ~5 minutes and before each
+sleep, so it only resets if that file is lost. The `[power]` constants are
+meant to be calibrated against a wall meter.
+
+### Webhook push
+
+With `[webhook].url` set, the agent POSTs JSON events (fire-and-forget;
+failures are only logged and never affect sleep):
+
+```json
+{"event": "started", "hostname": "DESK", "version": "0.2.0", "ts": "2026-10-20T07:18:03-04:00"}
+{"event": "sleeping", ..., "forced": false}
+{"event": "woke", ..., "slept_s": 3600.0}
+```
+
+`sleeping` is sent once, during the response delay before suspend.
+`started` and `woke` retry with backoff for `retry_seconds`, since the
+network is often not up yet at logon or resume. The URL holds the webhook
+id, so keep it only in `config.toml`; it is never logged.
 
 The wake grace exists because a remote wake involves no input, so `idle_s`
 still reflects the last input before sleep and the PC would otherwise be

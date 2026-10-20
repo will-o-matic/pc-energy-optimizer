@@ -4,7 +4,11 @@ from __future__ import annotations
 import ctypes
 import logging
 import subprocess
+import sys
 from ctypes import wintypes
+
+from . import powerreq
+from .metrics import NO_WINDOW
 
 log = logging.getLogger(__name__)
 
@@ -45,8 +49,31 @@ def log_sleep_states() -> None:
     """Log `powercfg /a` so the log records which sleep states this PC supports."""
     try:
         out = subprocess.run(
-            ["powercfg", "/a"], capture_output=True, text=True, timeout=10
+            ["powercfg", "/a"], capture_output=True, text=True, timeout=10,
+            creationflags=NO_WINDOW,
         ).stdout.strip()
         log.info("powercfg /a:\n%s", out)
     except Exception:
         log.exception("could not run powercfg /a")
+
+
+def get_power_requests() -> list[dict] | None:
+    """All active power requests from `powercfg /requests`, or None if they
+    can't be read (it needs an elevated process)."""
+    try:
+        out = subprocess.run(
+            ["powercfg", "/requests"], capture_output=True, text=True,
+            timeout=10, creationflags=NO_WINDOW,
+        )
+    except Exception:
+        log.exception("could not run powercfg /requests")
+        return None
+    if out.returncode != 0:
+        log.warning("powercfg /requests failed (exit %s, needs admin): %s",
+                    out.returncode, (out.stdout or out.stderr).strip())
+        return None
+    return powerreq.parse(out.stdout)
+
+
+def own_exe() -> str:
+    return sys.executable

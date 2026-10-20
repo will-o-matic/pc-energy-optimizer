@@ -1,6 +1,6 @@
 [project]
 name = "pc-energy-optimizer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Background agent letting Home Assistant manage PC power over the tailnet"
 requires-python = ">=3.11"
 dependencies = [

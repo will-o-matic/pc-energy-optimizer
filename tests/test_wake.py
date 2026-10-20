@@ -60,11 +60,25 @@ def test_gap_at_threshold_not_wake():
     print("OK: gap equal to threshold is not a wake")
 
 
+def test_on_wake_reports_gap():
+    clock = FakeClock()
+    seen = []
+    w = WakeTracker(clock=clock, gap_s=30, on_wake=seen.append)
+    clock.t += 5
+    w.tick()
+    assert seen == []
+    clock.t += 3600
+    w.tick()
+    assert seen == [3600]
+    print("OK: on_wake called with slept seconds")
+
+
 if __name__ == "__main__":
     test_start_counts_as_wake()
     test_regular_ticks_accumulate()
     test_gap_resets_wake()
     test_query_detects_wake_before_heartbeat()
     test_gap_at_threshold_not_wake()
+    test_on_wake_reports_gap()
     print("OK: test_wake")
     sys.exit(0)
