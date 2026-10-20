@@ -10,9 +10,26 @@ min_idle_minutes = 10
 wake_grace_minutes = 10        # idle clock starts this long after resume/start
 max_cpu_percent = 50
 cpu_sample_seconds = 1.0
+power_request_types = ["SYSTEM", "AWAYMODE", "EXECUTION"]  # powercfg /requests types that refuse
+ignore_power_requests = []     # case-insensitive substrings of name/reason to ignore
 
 [sleep]
 response_delay_seconds = 3
+
+[webhook]
+url = ""                       # e.g. https://<ha-host>/api/webhook/<id>; empty disables push
+timeout_seconds = 2
+retry_seconds = 60             # started/woke keep retrying this long
+
+[power]
+# estimated_watts = base_watts + cpu_watts * (cpu%/100) ** cpu_exponent
+#                   + gpu_watts / psu_efficiency (or gpu_fallback_watts without nvidia-smi)
+base_watts = 60
+cpu_watts = 120
+cpu_exponent = 1.0
+gpu_fallback_watts = 0
+psu_efficiency = 0.9
+sample_seconds = 10
 
 [logging]
 level = "INFO"

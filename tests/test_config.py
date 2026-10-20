@@ -107,6 +107,50 @@ def test_missing_file_fatal():
     raise AssertionError("missing file did not raise")
 
 
+def test_webhook_and_power_sections():
+    text = MINIMAL + """
+[webhook]
+url = "https://ha.example/api/webhook/abc"
+
+[power]
+base_watts = 70
+cpu_exponent = 1.3
+
+[guardrails]
+ignore_power_requests = ["Legacy Kernel Caller"]
+"""
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = load_config(write_toml(tmp, text))
+    assert cfg.webhook.url.endswith("/abc") and cfg.webhook.retry_seconds == 60
+    assert cfg.power.base_watts == 70.0 and cfg.power.cpu_exponent == 1.3
+    assert cfg.guardrails.ignore_power_requests == ["Legacy Kernel Caller"]
+    assert cfg.guardrails.power_request_types == ["SYSTEM", "AWAYMODE", "EXECUTION"]
+    print("OK: webhook/power/power-request config")
+
+
+def test_defaults_disable_webhook():
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = load_config(write_toml(tmp, MINIMAL))
+    assert cfg.webhook.url == ""
+    print("OK: webhook disabled by default")
+
+
+def test_invalid_new_values_fatal():
+    for extra, word in (
+        ('[webhook]\nurl = "ftp://x"\n', "webhook"),
+        ("[power]\npsu_efficiency = 1.5\n", "psu_efficiency"),
+        ("[guardrails]\nignore_power_requests = [1]\n", "ignore_power_requests"),
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                load_config(write_toml(tmp, MINIMAL + extra))
+            except ConfigError as e:
+                assert word in str(e), e
+                continue
+        raise AssertionError(f"{extra!r} did not raise")
+    print("OK: invalid webhook/power values raise")
+
+
 if __name__ == "__main__":
     test_defaults_applied()
     test_overrides()
@@ -114,5 +158,8 @@ if __name__ == "__main__":
     test_placeholder_token_fatal()
     test_bad_type_fatal()
     test_missing_file_fatal()
+    test_webhook_and_power_sections()
+    test_defaults_disable_webhook()
+    test_invalid_new_values_fatal()
     print("OK: test_config")
     sys.exit(0)

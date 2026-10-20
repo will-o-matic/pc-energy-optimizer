@@ -3,7 +3,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-MODULES = ["test_config.py", "test_guardrails.py", "test_server.py", "test_wake.py"]
+MODULES = [
+    "test_config.py", "test_guardrails.py", "test_server.py", "test_wake.py",
+    "test_powerreq.py", "test_energy.py", "test_webhook.py",
+]
 
 here = Path(__file__).parent
 failed = []

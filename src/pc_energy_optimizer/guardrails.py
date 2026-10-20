@@ -18,6 +18,7 @@ def evaluate(
     cfg: GuardrailsConfig,
     force: bool,
     since_wake_s: float = float("inf"),
+    power_requests: list[dict] | None = None,
 ) -> Decision:
     if force:
         return Decision(allowed=True)
@@ -47,4 +48,8 @@ def evaluate(
                 "threshold": float(cfg.max_cpu_percent),
             }
         )
+    # power_requests is already filtered to blocking ones; None means
+    # powercfg couldn't be read and the check is skipped.
+    if power_requests:
+        reasons.append({"code": "power_request", "requests": power_requests})
     return Decision(allowed=not reasons, reasons=reasons)

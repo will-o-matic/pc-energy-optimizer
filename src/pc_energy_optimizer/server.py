@@ -1,7 +1,8 @@
 """HTTP API: routing, bearer auth, JSON responses.
 
-Providers (idle_fn, cpu_fn, sleep_fn, since_wake_fn) are injected so tests never touch
-Windows APIs.
+Providers (idle_fn, cpu_fn, sleep_fn, since_wake_fn, power_fn,
+power_requests_fn) and the on_sleep hook are injected so tests never touch
+Windows APIs or the network.
 """
 from __future__ import annotations
 
@@ -18,6 +19,8 @@ from .guardrails import evaluate
 
 log = logging.getLogger(__name__)
 
+FEATURES = ["since_wake", "webhook", "power_estimate", "power_request"]
+
 
 def create_server(
     cfg: Config,
@@ -25,6 +28,9 @@ def create_server(
     cpu_fn: Callable[[], float],
     sleep_fn: Callable[[], bool],
     since_wake_fn: Callable[[], float],
+    power_fn: Callable[[], dict],
+    power_requests_fn: Callable[[], list[dict] | None] = lambda: None,
+    on_sleep: Callable[[bool], None] = lambda forced: None,
 ) -> ThreadingHTTPServer:
     token = cfg.server.token
 
@@ -49,7 +55,10 @@ def create_server(
 
         def do_GET(self):
             if self.path == "/health":
-                self._send_json(200, {"status": "ok", "version": __version__})
+                self._send_json(
+                    200,
+                    {"status": "ok", "version": __version__, "features": FEATURES},
+                )
                 return
             if self.path == "/status":
                 if not self._authorized():
@@ -63,6 +72,7 @@ def create_server(
                         "cpu_percent": cpu_fn(),
                         "uptime_s": metrics.uptime_s(),
                         "since_wake_s": since_wake_fn(),
+                        **power_fn(),
                         "version": __version__,
                     },
                 )
@@ -96,6 +106,8 @@ def create_server(
                 cfg=cfg.guardrails,
                 force=force,
                 since_wake_s=since_wake_fn(),
+                # powercfg takes a moment; don't bother when forcing
+                power_requests=None if force else power_requests_fn(),
             )
             if not decision.allowed:
                 log.info("sleep refused: %s", decision.reasons)
@@ -106,6 +118,11 @@ def create_server(
 
             delay = cfg.sleep.response_delay_seconds
             log.info("sleep accepted (forced=%s), suspending in %ss", force, delay)
+            try:
+                # announce first; it must never delay or block the suspend
+                on_sleep(force)
+            except Exception:
+                log.exception("on_sleep hook failed")
             threading.Timer(delay, _do_sleep).start()
             self._send_json(
                 202, {"result": "sleeping", "delay_s": delay, "forced": force}

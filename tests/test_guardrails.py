@@ -82,6 +82,32 @@ def test_force_bypasses_recently_woke():
     print("OK: force bypasses wake grace")
 
 
+REQ = {"type": "SYSTEM", "kind": "PROCESS", "name": "x.exe", "reason": ""}
+
+
+def test_refused_power_request():
+    d = evaluate(idle_s=9999, cpu_percent=10.0, cfg=CFG, force=False,
+                 power_requests=[REQ])
+    assert not d.allowed
+    assert d.reasons == [{"code": "power_request", "requests": [REQ]}]
+    print("OK: refused on power request")
+
+
+def test_power_request_unreadable_or_empty_allows():
+    for reqs in (None, []):
+        d = evaluate(idle_s=9999, cpu_percent=10.0, cfg=CFG, force=False,
+                     power_requests=reqs)
+        assert d.allowed
+    print("OK: unreadable/empty power requests allow")
+
+
+def test_force_bypasses_power_request():
+    d = evaluate(idle_s=0, cpu_percent=10.0, cfg=CFG, force=True,
+                 power_requests=[REQ])
+    assert d.allowed
+    print("OK: force bypasses power request")
+
+
 if __name__ == "__main__":
     test_allowed_when_idle_and_calm()
     test_refused_recently_woke()
@@ -92,5 +118,8 @@ if __name__ == "__main__":
     test_both_reasons_in_order()
     test_force_bypasses_everything()
     test_boundaries()
+    test_refused_power_request()
+    test_power_request_unreadable_or_empty_allows()
+    test_force_bypasses_power_request()
     print("OK: test_guardrails")
     sys.exit(0)
