@@ -32,7 +32,7 @@ process**. The at-logon task runs non-elevated, so by default the check
 can't read requests: it logs a warning and is skipped (never refuses).
 
 `features` in `/health` lets clients detect what an agent supports:
-`since_wake`, `webhook`, `power_estimate`, `power_request`.
+`since_wake`, `webhook`, `power_estimate`, `power_request`, `sleep_failed`.
 
 ### Power estimate
 
@@ -57,9 +57,32 @@ failures are only logged and never affect sleep):
 {"event": "started", "hostname": "DESK", "version": "0.2.0", "ts": "2026-10-20T07:18:03-04:00"}
 {"event": "sleeping", ..., "forced": false}
 {"event": "woke", ..., "slept_s": 3600.0}
+{"event": "sleep_failed", ..., "reason": "away_mode", "initiated_by": "other",
+ "blockers": [{"name": "Plex", "detail": "movie paused on Android (192.0.2.15)"}]}
 ```
 
 `sleeping` is sent once, during the response delay before suspend.
+
+`sleep_failed` covers every sleep attempt, including ones the agent didn't
+start (Start menu, power button). The agent polls the System log every 5s
+for Kernel-Power 187 (a process requested sleep, with its PID), 59 (entered
+Away Mode instead) and 42 (really entering sleep). An attempt with no 42 and
+no resume within 20s is reported once:
+
+- `reason`: `away_mode` (a 59 followed it, or Away Mode is still active),
+  `aborted` (187 only) or `unknown` (the agent called `SetSuspendState`
+  but Windows logged nothing).
+- `initiated_by`: `agent` if the 187's PID is this agent, else `other`.
+- `blockers`: best effort. Active Plex sessions when `[plex]` is enabled,
+  plus `powercfg /requests` entries when that is readable (it needs
+  elevation, so normally it isn't).
+
+`SetSuspendState` reports success even when Windows turns the request into
+Away Mode, so `202 sleeping` alone doesn't mean the PC slept. Away Mode
+happens when "Allow Away Mode Policy" is on (it is, on AC, in the stock
+plans) and an app such as Plex Media Server holds an Away Mode request while
+a stream is open, even a paused one.
+
 `started` and `woke` retry with backoff for `retry_seconds`, since the
 network is often not up yet at logon or resume. The URL holds the webhook
 id, so keep it only in `config.toml`; it is never logged.

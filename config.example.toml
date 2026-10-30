@@ -31,5 +31,12 @@ gpu_fallback_watts = 0
 psu_efficiency = 0.9
 sample_seconds = 10
 
+[plex]
+# Name active Plex streams in sleep_failed events (a paused stream holds Away Mode).
+enabled = false
+url = "http://127.0.0.1:32400"
+token = ""                     # X-Plex-Token; leave empty only if Plex allows this host without auth
+timeout_seconds = 2
+
 [logging]
 level = "INFO"

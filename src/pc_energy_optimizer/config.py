@@ -56,6 +56,15 @@ class PowerConfig:
 
 
 @dataclass
+class PlexConfig:
+    # Report active Plex sessions as the reason a sleep didn't happen.
+    enabled: bool = False
+    url: str = "http://127.0.0.1:32400"
+    token: str = ""  # X-Plex-Token; empty works only if Plex allows this host without auth
+    timeout_seconds: float = 2.0
+
+
+@dataclass
 class LoggingConfig:
     level: str = "INFO"
 
@@ -67,6 +76,7 @@ class Config:
     sleep: SleepConfig = field(default_factory=SleepConfig)
     webhook: WebhookConfig = field(default_factory=WebhookConfig)
     power: PowerConfig = field(default_factory=PowerConfig)
+    plex: PlexConfig = field(default_factory=PlexConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
 
@@ -76,6 +86,7 @@ _SECTIONS = {
     "sleep": SleepConfig,
     "webhook": WebhookConfig,
     "power": PowerConfig,
+    "plex": PlexConfig,
     "logging": LoggingConfig,
 }
 

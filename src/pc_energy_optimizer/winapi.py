@@ -7,7 +7,7 @@ import subprocess
 import sys
 from ctypes import wintypes
 
-from . import powerreq
+from . import powerreq, sleepwatch
 from .metrics import NO_WINDOW
 
 log = logging.getLogger(__name__)
@@ -73,6 +73,45 @@ def get_power_requests() -> list[dict] | None:
                     out.returncode, (out.stdout or out.stderr).strip())
         return None
     return powerreq.parse(out.stdout)
+
+
+_KP_QUERY = (
+    "*[System[Provider[@Name='Microsoft-Windows-Kernel-Power']"
+    " and (EventID=42 or EventID=59 or EventID=187){extra}]]"
+)
+
+
+def _wevtutil(args: list[str]) -> str | None:
+    try:
+        out = subprocess.run(
+            ["wevtutil", "qe", "System", *args, "/f:xml"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=10, creationflags=NO_WINDOW,
+        )
+    except Exception:
+        log.exception("could not run wevtutil")
+        return None
+    if out.returncode != 0:
+        log.warning("wevtutil failed (exit %s): %s", out.returncode,
+                    (out.stderr or out.stdout).strip())
+        return None
+    return out.stdout
+
+
+def latest_power_event_id() -> int | None:
+    """Record id of the newest Kernel-Power 42/59/187 event (0 if none)."""
+    text = _wevtutil([f"/q:{_KP_QUERY.format(extra='')}", "/rd:true", "/c:1"])
+    if text is None:
+        return None
+    events = sleepwatch.parse_events_xml(text)
+    return events[-1]["record_id"] if events else 0
+
+
+def power_events_after(record_id: int) -> list[dict] | None:
+    """Kernel-Power 42/59/187 events newer than record_id, oldest first."""
+    query = _KP_QUERY.format(extra=f" and EventRecordID>{int(record_id)}")
+    text = _wevtutil([f"/q:{query}", "/c:50"])
+    return None if text is None else sleepwatch.parse_events_xml(text)
 
 
 def own_exe() -> str:
