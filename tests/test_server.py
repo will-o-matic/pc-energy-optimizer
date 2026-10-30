@@ -82,7 +82,8 @@ def main():
     assert status == 200 and body == {
         "status": "ok",
         "version": __version__,
-        "features": ["since_wake", "webhook", "power_estimate", "power_request"],
+        "features": ["since_wake", "webhook", "power_estimate", "power_request",
+                     "sleep_failed"],
     }
     print("OK: /health no auth")
 

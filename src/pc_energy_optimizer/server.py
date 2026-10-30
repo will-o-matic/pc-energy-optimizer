@@ -19,7 +19,7 @@ from .guardrails import evaluate
 
 log = logging.getLogger(__name__)
 
-FEATURES = ["since_wake", "webhook", "power_estimate", "power_request"]
+FEATURES = ["since_wake", "webhook", "power_estimate", "power_request", "sleep_failed"]
 
 
 def create_server(

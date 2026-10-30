@@ -2,15 +2,17 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from pathlib import Path
 
-from . import __version__, metrics, powerreq, winapi
+from . import __version__, metrics, plex, powerreq, winapi
 from .config import ConfigError, load_config
 from .energy import EnergyMeter
 from .logging_setup import setup_logging
 from .server import create_server
+from .sleepwatch import SleepWatcher
 from .wake import WakeTracker
 from .webhook import Notifier
 
@@ -46,9 +48,38 @@ def main() -> int:
     )
     meter.start()
 
+    def blockers_fn() -> list[dict]:
+        """Best-effort list of what kept the PC awake, for sleep_failed."""
+        found = plex.blockers(cfg.plex)
+        reqs = winapi.get_power_requests()  # None without elevation
+        for r in powerreq.blocking(
+            reqs or [], cfg.guardrails.power_request_types,
+            cfg.guardrails.ignore_power_requests, own_exe=winapi.own_exe(),
+        ):
+            name = r["name"].replace("\\", "/").rsplit("/", 1)[-1] or r["type"]
+            found.append({"name": name, "detail": (r["reason"] or r["type"])[:60]})
+        return found
+
+    def on_sleep_failed(**fields) -> None:
+        notifier.send("sleep_failed", retry=True, **fields)
+
+    watcher = SleepWatcher(
+        events_fn=winapi.power_events_after,
+        latest_id_fn=winapi.latest_power_event_id,
+        blockers_fn=blockers_fn,
+        notify_fn=on_sleep_failed,
+        own_pid=os.getpid(),
+    )
+    watcher.start()
+
     def on_wake(slept_s: float) -> None:
+        watcher.on_wake(slept_s)
         # the network is usually not back yet at resume, hence retry
         notifier.send("woke", retry=True, slept_s=round(slept_s, 1))
+
+    def sleep_fn() -> bool:
+        watcher.note_agent_sleep()
+        return winapi.request_sleep()
 
     def on_sleep(forced: bool) -> None:
         meter.persist()
@@ -76,7 +107,7 @@ def main() -> int:
                 cfg,
                 idle_fn=winapi.get_idle_seconds,
                 cpu_fn=cpu_fn,
-                sleep_fn=winapi.request_sleep,
+                sleep_fn=sleep_fn,
                 since_wake_fn=wake.seconds_since_wake,
                 power_fn=meter.snapshot,
                 power_requests_fn=power_requests_fn,
